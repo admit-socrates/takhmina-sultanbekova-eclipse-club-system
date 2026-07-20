@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Eclipse Club System</title>
+<style>
+  :root {
+    --bg: #f5f5f7;
+    --card: #ffffff;
+    --ink: #1c1c1e;
+    --muted: #6b6b70;
+    --line: #dcdce0;
+    --accent: #7b3fa0;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 16px;
+    font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+  }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 13px; margin-bottom: 20px; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 16px;
+    max-width: 640px;
+  }
+  .card h2 { font-size: 15px; margin: 0 0 12px; }
+  label { display: block; font-size: 13px; margin: 10px 0 4px; color: var(--muted); }
+  input, select {
+    width: 100%;
+    padding: 9px 10px;
+    font-size: 15px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: #fff;
+    color: var(--ink);
+  }
+  button {
+    padding: 9px 14px;
+    font-size: 14px;
+    border: 0;
+    border-radius: 6px;
+    background: var(--accent);
+    color: #fff;
+    cursor: pointer;
+    margin: 12px 6px 0 0;
+  }
+  button.ghost { background: #e8e8ec; color: var(--ink); }
+  button:hover { opacity: .9; }
+  .stats {
+    display: flex;
+    gap: 12px;
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid var(--line);
+  }
+  .stat { flex: 1; }
+  .stat .n { font-size: 22px; font-weight: 600; }
+  .stat .l { font-size: 12px; color: var(--muted); }
+  ul { list-style: none; padding: 0; margin: 0; }
+  li {
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    margin-bottom: 6px;
+    cursor: pointer;
+    font-size: 14px;
+  }
+  li:hover { border-color: var(--accent); }
+  li.on { border-color: var(--accent); background: #f6f0fa; }
+  li .meta { color: var(--muted); font-size: 12px; }
+  pre {
+    background: #fafafa;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 12px;
+    font-size: 13px;
+    white-space: pre-wrap;
+    margin: 0;
+  }
+  .err { color: #b00020; font-size: 13px; min-height: 18px; margin-top: 8px; }
+  .hide { display: none; }
+</style>
+</head>
+<body>
+
+<h1>Eclipse Club System</h1>
+<div class="sub">Учёт посещаемости и активности участников танцевального клуба Eclipse</div>
+
+<!-- LOGIN -->
+<div class="card" id="loginCard">
+  <h2>Вход администратора</h2>
+  <label for="user">Логин</label>
+  <input id="user" value="admin">
+  <label for="pass">Пароль</label>
+  <input id="pass" type="password" value="1234">
+  <button onclick="login()">Войти</button>
+  <div class="err" id="loginErr"></div>
+</div>
+
+<!-- APP -->
+<div id="app" class="hide">
+
+  <div class="card">
+    <h2>Добавить участника</h2>
+    <label for="name">Имя</label>
+    <input id="name" placeholder="Например: Айша Нурлан">
+
+    <label for="cls">Класс</label>
+    <select id="cls">
+      <option value="">Выберите класс</option>
+      <option>8A</option><option>8B</option>
+      <option>9A</option><option>9B</option>
+      <option>10A</option><option>10B</option>
+      <option>11A</option>
+    </select>
+
+    <label for="total">Всего репетиций</label>
+    <input id="total" type="number" min="0" max="100" value="0" oninput="preview()">
+
+    <label for="went">Посетил репетиций</label>
+    <input id="went" type="number" min="0" max="100" value="0" oninput="preview()">
+
+    <label for="shows">Выступлений</label>
+    <input id="shows" type="number" min="0" max="100" value="0" oninput="preview()">
+
+    <div class="stats">
+      <div class="stat"><div class="n" id="pAtt">0%</div><div class="l">Посещаемость</div></div>
+      <div class="stat"><div class="n" id="pScore">0</div><div class="l">Балл активности</div></div>
+    </div>
+
+    <button onclick="save()" id="saveBtn">Добавить</button>
+    <button class="ghost" onclick="clearForm()">Очистить</button>
+    <div class="err" id="formErr"></div>
+  </div>
+
+  <div class="card">
+    <h2>Участники клуба (<span id="count">0</span>)</h2>
+    <ul id="list"></ul>
+    <div class="sub" id="empty">Пока никого нет. Добавьте первого участника.</div>
+  </div>
+
+  <div class="card">
+    <h2>Отчёт по участнику</h2>
+    <pre id="report">Выберите участника из списка.</pre>
+  </div>
+
+</div>
+
+<script>
+// Балл активности = выступления * 5 + посещённые репетиции
+// (та же формула, что и в версии на C#)
+
+let members = [];
+let editing = -1;
+
+function loadSaved() {
+  try {
+    const raw = localStorage.getItem('eclipse_members');
+    if (raw) members = JSON.parse(raw);
+  } catch (e) {
+    members = [];
+  }
+}
+
+function persist() {
+  localStorage.setItem('eclipse_members', JSON.stringify(members));
+}
+
+function login() {
+  const u = document.getElementById('user').value.trim();
+  const p = document.getElementById('pass').value;
+  if (u === 'admin' && p === '1234') {
+    document.getElementById('loginCard').classList.add('hide');
+    document.getElementById('app').classList.remove('hide');
+    loadSaved();
+    render();
+  } else {
+    document.getElementById('loginErr').textContent = 'Неверный логин или пароль';
+  }
+}
+
+function attendance(m) {
+  if (m.total === 0) return 0;
+  return (m.went / m.total) * 100;
+}
+
+function score(m) {
+  return m.shows * 5 + m.went;
+}
+
+function preview() {
+  const total = +document.getElementById('total').value || 0;
+  const went = +document.getElementById('went').value || 0;
+  const shows = +document.getElementById('shows').value || 0;
+  const pct = total > 0 ? (went / total) * 100 : 0;
+  document.getElementById('pAtt').textContent = pct.toFixed(1) + '%';
+  document.getElementById('pScore').textContent = shows * 5 + went;
+}
+
+function save() {
+  const name = document.getElementById('name').value.trim();
+  const cls = document.getElementById('cls').value;
+  const total = +document.getElementById('total').value || 0;
+  const went = +document.getElementById('went').value || 0;
+  const shows = +document.getElementById('shows').value || 0;
+  const err = document.getElementById('formErr');
+  err.textContent = '';
+
+  if (!name) { err.textContent = 'Введите имя участника.'; return; }
+  if (!cls) { err.textContent = 'Выберите класс.'; return; }
+  if (went > total) { err.textContent = 'Посещённых репетиций не может быть больше, чем всего.'; return; }
+
+  const m = { name, cls, total, went, shows };
+
+  if (editing >= 0) {
+    members[editing] = m;
+  } else {
+    members.push(m);
+  }
+
+  persist();
+  clearForm();
+  render();
+  showReport(members.indexOf(m) >= 0 ? members.indexOf(m) : members.length - 1);
+}
+
+function clearForm() {
+  editing = -1;
+  document.getElementById('name').value = '';
+  document.getElementById('cls').value = '';
+  document.getElementById('total').value = 0;
+  document.getElementById('went').value = 0;
+  document.getElementById('shows').value = 0;
+  document.getElementById('saveBtn').textContent = 'Добавить';
+  document.getElementById('formErr').textContent = '';
+  preview();
+  render();
+}
+
+function pick(i) {
+  editing = i;
+  const m = members[i];
+  document.getElementById('name').value = m.name;
+  document.getElementById('cls').value = m.cls;
+  document.getElementById('total').value = m.total;
+  document.getElementById('went').value = m.went;
+  document.getElementById('shows').value = m.shows;
+  document.getElementById('saveBtn').textContent = 'Сохранить изменения';
+  preview();
+  render();
+  showReport(i);
+}
+
+function remove(i, ev) {
+  ev.stopPropagation();
+  members.splice(i, 1);
+  persist();
+  clearForm();
+  document.getElementById('report').textContent = 'Выберите участника из списка.';
+}
+
+function showReport(i) {
+  const m = members[i];
+  if (!m) return;
+  document.getElementById('report').textContent =
+    'Танцевальный клуб Eclipse\n\n' +
+    'Участник: ' + m.name + '\n' +
+    'Класс: ' + m.cls + '\n' +
+    'Всего репетиций: ' + m.total + '\n' +
+    'Посетил: ' + m.went + '\n' +
+    'Посещаемость: ' + attendance(m).toFixed(1) + '%\n' +
+    'Выступлений: ' + m.shows + '\n' +
+    'Балл активности: ' + score(m);
+}
+
+function render() {
+  const list = document.getElementById('list');
+  list.innerHTML = '';
+  document.getElementById('count').textContent = members.length;
+  document.getElementById('empty').style.display = members.length ? 'none' : 'block';
+
+  members.forEach((m, i) => {
+    const li = document.createElement('li');
+    if (i === editing) li.className = 'on';
+    li.onclick = () => pick(i);
+    li.innerHTML = '<strong>' + m.name + '</strong> ' +
+      '<span class="meta">' + m.cls + ' · ' + attendance(m).toFixed(0) + '% · ' + score(m) + ' балл.</span>';
+    const del = document.createElement('button');
+    del.textContent = '×';
+    del.className = 'ghost';
+    del.style.cssText = 'float:right;margin:0;padding:2px 8px;';
+    del.onclick = (e) => remove(i, e);
+    li.appendChild(del);
+    list.appendChild(li);
+  });
+}
+</script>
+</body>
+</html>
